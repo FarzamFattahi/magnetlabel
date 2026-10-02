@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+data/
+dist/
+build/
+exports/
+*.zip
+playwright-report/
+test-results/
+.tools/
+.playwright-cli/
+node_modules/
+MagnetLabel.spec

@@ -1,0 +1,9 @@
+{
+  "image": "coffee.png",
+  "objects": 2,
+  "classes": [
+    "cup",
+    "spoon"
+  ],
+  "status": "draft for human review"
+}

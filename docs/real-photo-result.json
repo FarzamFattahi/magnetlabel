@@ -1,0 +1,21 @@
+{
+  "image": "coffee.png",
+  "dimensions": [
+    600,
+    400
+  ],
+  "rect": [
+    160,
+    10,
+    265,
+    310
+  ],
+  "hint_strokes": 5,
+  "initial_mask_pixels": 41181,
+  "refined_mask_pixels": 47068,
+  "initial_seconds": 1.042,
+  "refined_seconds": 0.912,
+  "checks": "cup body recovered; spoon center excluded",
+  "ground_truth_available": false,
+  "opencv": "4.14.0"
+}
