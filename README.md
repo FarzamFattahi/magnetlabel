@@ -17,9 +17,9 @@ No account, cloud upload, GPU, or model weights. Your browser is the interface; 
 
 **[Download for Windows](https://github.com/FarzamFattahi/magnetlabel/releases/latest) · [Quick start](#start-in-minutes) · [Annotation guide](#your-first-dataset) · [Export details](#training-ready-exports) · [Validation](docs/validation.md)**
 
-![The actual workspace with cup and spoon masks on a real photograph](docs/screenshots/real-photo-workspace.png)
+![The actual workspace with human-corrected cup and spoon masks on a real photograph](docs/screenshots/cup-spoon-reviewed.jpg)
 
-*Actual application screenshot: cup and spoon are separate labels. These example masks are working annotations for inspection, not benchmark ground truth. The banner above is AI-generated promotional artwork.*
+*Actual application screenshot with masks corrected and reviewed by Farzam: cup and spoon are separate labels. This is a human-reviewed example, not benchmark ground truth. The banner above is AI-generated promotional artwork.*
 
 ## Start in minutes
 

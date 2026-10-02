@@ -37,13 +37,13 @@ The usability test compares rendered canvas pixels before and after right-button
 
 ## Real photograph: cup and spoon only
 
-The included [CC0 coffee image](../examples/ATTRIBUTION.md) comes from the internet/scikit-image. The current UI example creates two classes, **cup** and **spoon**, and saves two separately labeled instances. No person image or person annotation is shipped.
+The included [CC0 coffee image](../examples/ATTRIBUTION.md) comes from the internet/scikit-image. The showcase contains two classes, **cup** and **spoon**, and two separately labeled instances. Farzam corrected the mask boundaries in the application and reviewed the image. The screenshot below was captured from that saved workspace; the cup class assignment was corrected before capture. No person image or person annotation is shipped.
 
-![Cup and spoon masks in the actual application](screenshots/real-photo-workspace.png)
+![Farzam's corrected and reviewed cup and spoon masks](screenshots/cup-spoon-reviewed.jpg)
 
-A loose cup box initially misses dark cup-body pixels and includes spoon pixels. Foreground/background hints improve it. [The point-based check](../examples/validate_photo.py) verifies cup-body recovery and exclusion of a spoon-center pixel. The spoon example uses a manual polygon and brush corrections for its visible parts. Occluded pixels are not invented; the disconnected visible handle and bowl remain one stored instance, which COCO RLE preserves and strict YOLO conversion flags.
+A loose cup box initially misses dark cup-body pixels and includes spoon pixels. Foreground/background hints improve it. [The point-based check](../examples/validate_photo.py) verifies cup-body recovery and exclusion of a spoon-center pixel. The automated browser demonstration uses a manual polygon and brush corrections for the spoon; those initial generated masks are separate from the updated human-reviewed showcase. Occluded pixels are not invented; disconnected visible parts can remain one stored instance, which COCO RLE preserves and strict YOLO conversion flags.
 
-There is no expert reference mask for this photograph. The examples remain drafts for inspection and are not described as exact ground truth or a measured annotation-speed benchmark.
+There is no expert reference mask for this photograph. The current showcase is human-reviewed, while automated demonstration masks remain drafts for inspection. Neither is described as exact ground truth or a measured annotation-speed benchmark.
 
 ## Distribution
 

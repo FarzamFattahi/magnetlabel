@@ -1,6 +1,6 @@
 include LICENSE README.md CONTRIBUTING.md start.cmd start.sh
 recursive-include packaging *.py *.ps1 *.txt
-recursive-include docs *.md *.json *.png
+recursive-include docs *.md *.json *.png *.jpg
 recursive-include examples *.py *.png *.md
 recursive-include tests *.py *.cjs
 recursive-include src/magnetlabel/static *.html *.css *.js *.svg

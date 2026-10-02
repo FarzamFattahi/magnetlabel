@@ -5,5 +5,8 @@
     "cup",
     "spoon"
   ],
-  "status": "draft for human review"
+  "status": "human-corrected and reviewed showcase",
+  "screenshot": "screenshots/cup-spoon-reviewed.jpg",
+  "reviewer": "Farzam Fattahi",
+  "ground_truth_available": false
 }
