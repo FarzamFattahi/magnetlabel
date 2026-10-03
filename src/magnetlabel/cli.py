@@ -9,7 +9,9 @@ from .server import create_app
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MagnetLabel local segmentation and detection workspace")
+    parser = argparse.ArgumentParser(
+        description="MagnetLabel local segmentation and detection workspace"
+    )
     parser.add_argument(
         "--data",
         type=Path,
