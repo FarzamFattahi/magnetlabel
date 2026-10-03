@@ -1,9 +1,12 @@
-MagnetLabel 0.2.0 - Windows x64
+MagnetLabel 0.3.0 - Windows x64
 
 1. Extract the entire ZIP to a folder you can write to.
 2. Double-click MagnetLabel.exe. Keep the terminal open while labeling.
 3. Your browser opens http://127.0.0.1:8765.
-4. Click Choose your images, name your labels, and import your dataset.
+4. Choose your task: Segmentation (masks) or Object detection (boxes).
+   Name your labels and import your dataset.
+   For detection, drag a rectangle, choose its class, then Add object.
+   Select an added object to move it or resize its corners. Review before export.
 5. Stop the app with Ctrl+C in its terminal.
 
 No Python, GPU, account, or model download is required for this package.

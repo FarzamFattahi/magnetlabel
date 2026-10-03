@@ -50,11 +50,11 @@ class Datasets:
                 for key in self.entries["datasets"]
             ]
 
-    def create(self, name: str, classes: list[str]):
+    def create(self, name: str, classes: list[str], task: str = "segmentation"):
         with self.lock:
             dataset_id = uuid.uuid4().hex
             store = Store(self.root / "projects" / dataset_id)
-            store.configure(name, classes)
+            store.configure(name, classes, task)
             self.entries["datasets"][dataset_id] = f"projects/{dataset_id}"
             self.entries["active"] = dataset_id
             self.stores[dataset_id] = store

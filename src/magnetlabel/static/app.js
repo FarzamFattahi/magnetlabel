@@ -4,7 +4,7 @@ const state = {
   tool: 'box', rect: null, strokes: [], anchors: [], segments: [], preview: [],
   scale: 1, fit: 1, ox: 0, oy: 0, busy: false, drawing: null, space: false,
   dirty: 0, saved: 0, saving: null, saveTimer: null, undo: [], redo: [], epoch: 0,
-  hint: null, cursor: null, hoverTimer: null, pathRequest: 0, datasetId: null, outlinePrompt: null,
+  hint: null, cursor: null, hoverTimer: null, pathRequest: 0, datasetId: null, outlinePrompt: null, draftBox: null,
 };
 const canvas = $('canvas');
 const ctx = canvas.getContext('2d');
@@ -51,17 +51,39 @@ async function loadMask(src) {
   }
   cx.putImageData(pixels, 0, 0); return c;
 }
-function serializeObjects() { return state.objects.map(o => ({id: o.id, class_id: o.class_id, mask: o.canvas.toDataURL('image/png')})); }
+const isDetection = () => state.project?.task === 'detection';
+function serializeObjects() { return state.objects.map(o => ({id:o.id,class_id:o.class_id,...(o.bbox?{bbox:[...o.bbox]}:{mask:o.canvas.toDataURL('image/png')})})); }
+async function loadObject(o) {return o.bbox?{...o,bbox:[...o.bbox]}:{...o,canvas:await loadMask(o.mask)};}
+function renderTask() {
+  const detection=isDetection(); $('taskSelect').value=state.project.task;
+  document.querySelectorAll('[data-tool]').forEach(b=>b.hidden=detection&&b.dataset.tool!=='box');
+  document.querySelector('.tool-divider').hidden=detection;
+  const box=document.querySelector('[data-tool="box"]'); box.querySelector('span').textContent=detection?'Rectangle':'Box assist';
+  box.title=detection?'Rectangle (B): draw a bounding box':'Box assist (B): estimate foreground';
+  $('finishBtn').hidden=detection; $('overlayLabel').textContent=detection?'Boxes':'Masks';
+  $('segmentationExport').hidden=detection; $('detectionExport').hidden=!detection;
+  $('exportFormat').options[0].textContent=detection?'YOLO detection — bounding boxes':'YOLO segmentation — polygons';
+  $('exportFormat').options[1].textContent=detection?'COCO detection — bounding boxes':'COCO segmentation — exact RLE masks';
+}
+function boxCorners([x,y,w,h]) {return [[x,y],[x+w,y],[x+w,y+h],[x,y+h]];}
+function drawBox(box,label,selected=false,pending=false) {
+  const [x,y,w,h]=box; ctx.strokeStyle=label.color; ctx.lineWidth=(selected?2.5:1.5)/state.scale;
+  ctx.fillStyle=label.color; ctx.globalAlpha=.07; ctx.fillRect(x,y,w,h); ctx.globalAlpha=1; ctx.strokeRect(x,y,w,h);
+  if(selected) boxCorners(box).forEach(([a,b])=>{const r=4/state.scale;ctx.fillRect(a-r,b-r,r*2,r*2);});
+  const text=label.name+(pending?' · pending':''); ctx.font=`600 ${12/state.scale}px system-ui`;
+  const pad=4/state.scale,height=21/state.scale,top=Math.max(0,y-height),width=ctx.measureText(text).width+pad*2;
+  ctx.fillStyle=label.color;ctx.fillRect(x,top,width,height);ctx.fillStyle='#162018';ctx.fillText(text,x+pad,top+15/state.scale);
+}
 function snapshot() {
   return {objects: serializeObjects(), draft: state.draft?.toDataURL('image/png'), active: state.active,
-    rect: state.rect, strokes: structuredClone(state.strokes), anchors: structuredClone(state.anchors),
+    draftBox: structuredClone(state.draftBox), rect: state.rect, strokes: structuredClone(state.strokes), anchors: structuredClone(state.anchors),
     segments: structuredClone(state.segments), outlinePrompt: structuredClone(state.outlinePrompt), reviewed: Boolean(state.image.reviewed)};
 }
 function history() { state.undo.push(snapshot()); if (state.undo.length > 12) state.undo.shift(); state.redo = []; updateControls(); }
 async function restore(snap) {
-  state.objects = await Promise.all(snap.objects.map(async o => ({...o, canvas: await loadMask(o.mask)})));
+  state.objects = await Promise.all(snap.objects.map(loadObject));
   state.draft = snap.draft ? await loadMask(snap.draft) : null;
-  Object.assign(state, {active: snap.active, rect: snap.rect, strokes: snap.strokes, anchors: snap.anchors, segments: snap.segments, outlinePrompt: snap.outlinePrompt, preview: []});
+  Object.assign(state, {draftBox: snap.draftBox, active: snap.active, rect: snap.rect, strokes: snap.strokes, anchors: snap.anchors, segments: snap.segments, outlinePrompt: snap.outlinePrompt, preview: []});
   state.image.reviewed = snap.reviewed; changed(false); renderObjects(); updateControls(); render();
   if (state.active >= 0) $('classSelect').value = state.objects[state.active].class_id;
 }
@@ -85,7 +107,7 @@ async function save() {
   state.saving = api(`/api/images/${id}`, 'PUT', {objects: serializeObjects(), reviewed: Boolean(state.image.reviewed), revision: state.image.revision});
   try {
     const result = await state.saving; state.image.revision = result.revision; state.saved = version;
-    $('saveStatus').textContent = state.draft || state.anchors.length ? 'Objects saved · selection not added' : 'All changes saved locally';
+    $('saveStatus').textContent = hasPending() ? 'Objects saved · selection not added' : 'All changes saved locally';
     updateImageSummary();
   } catch (error) { $('saveStatus').textContent = 'Save failed · keep this tab open'; throw error; }
   finally { state.saving = null; }
@@ -113,7 +135,7 @@ function resetEditor() {
   $('saveStatus').textContent = 'Ready to import'; setTool('box'); render();
 }
 function renderProject() {
-  $('projectName').textContent = state.project.name;
+  $('projectName').textContent = state.project.name; renderTask();
   $('classSelect').replaceChildren(...state.project.classes.map(c => {
     const option = document.createElement('option'); option.value = c.id; option.textContent = `${c.id} · ${c.name}`; return option;
   }));
@@ -142,15 +164,15 @@ function renderDataset() {
   $('imagePosition').textContent = position < 0 ? '— / —' : `${position + 1} / ${all.length}`;
   $('prevBtn').disabled = position <= 0 || state.busy; $('nextBtn').disabled = position < 0 || position >= all.length - 1 || state.busy;
 }
-function hasPending() { return Boolean(state.draft || state.anchors.length || state.rect || state.outlinePrompt); }
+function hasPending() { return Boolean(state.draftBox || state.draft || state.anchors.length || state.rect || state.outlinePrompt); }
 function allowDiscard() { return !hasPending() || confirm('Discard the unfinished selection? Add it as an object to keep it.'); }
 async function openImage(id) {
   if (state.busy || id === state.image?.id || !allowDiscard()) return;
   await save(); busy(true, 'Opening image…');
   try {
     const [image, bitmap] = await Promise.all([api(`/api/images/${id}`), loadBitmap(imageURL(id))]);
-    const objects = await Promise.all(image.objects.map(async o => ({id: o.id, class_id: o.class_id, canvas: await loadMask(o.mask)})));
-    state.epoch++; Object.assign(state, {image, bitmap, objects, active: -1, draft: null, rect: null, outlinePrompt: null, strokes: [], anchors: [], segments: [], preview: [], undo: [], redo: [], dirty: 0, saved: 0, hint: null});
+    const objects = await Promise.all(image.objects.map(loadObject));
+    state.epoch++; Object.assign(state, {image, bitmap, objects, active: -1, draft: null, draftBox: null, rect: null, outlinePrompt: null, strokes: [], anchors: [], segments: [], preview: [], undo: [], redo: [], dirty: 0, saved: 0, hint: null});
     $('emptyState').hidden = true; $('canvasControls').hidden = false;
     $('fileName').textContent = image.name; $('imageDimensions').textContent = `${image.width} × ${image.height} PX`;
     $('saveStatus').textContent = image.reviewed ? 'Reviewed · saved locally' : 'All changes saved locally';
@@ -194,7 +216,8 @@ function render() {
   if (!state.bitmap) return;
   ctx.translate(state.ox, state.oy); ctx.scale(state.scale, state.scale); ctx.drawImage(state.bitmap, 0, 0);
   if ($('showMasks').checked) {
-    state.objects.forEach((o, i) => drawMask(o.canvas, state.project.classes[o.class_id].color, state.active === i ? .55 : .32));
+    state.objects.forEach((o,i)=>o.bbox?drawBox(o.bbox,state.project.classes[o.class_id],state.active===i):drawMask(o.canvas,state.project.classes[o.class_id].color,state.active===i?.55:.32));
+    if(state.draftBox) drawBox(state.draftBox,state.project.classes[+$('classSelect').value],true,true);
     if (state.draft) drawMask(state.draft, state.project.classes[+$('classSelect').value].color, .48);
   }
   ctx.lineWidth = 1.5 / state.scale; ctx.strokeStyle = color('--accent');
@@ -219,14 +242,14 @@ function renderObjects() {
     const b = document.createElement('button'); b.className = 'object-select' + (state.active === i ? ' active' : '');
     const swatch = document.createElement('span'); swatch.className = 'swatch'; swatch.style.background = state.project.classes[o.class_id].color;
     const label = document.createElement('span'); label.textContent = `${state.project.classes[o.class_id].name} ${i + 1}`; b.append(swatch, label);
-    b.onclick = () => { if (state.busy || !allowDiscard()) return; clearPending(); state.active = i; $('classSelect').value = o.class_id; setTool('add'); renderObjects(); render(); };
+    b.onclick = () => { if (state.busy || !allowDiscard()) return; clearPending(); state.active = i; $('classSelect').value = o.class_id; setTool(isDetection()?'box':'add'); renderObjects(); render(); };
     const del = document.createElement('button'); del.className = 'delete-object'; del.textContent = '×'; del.setAttribute('aria-label', `Delete object ${i + 1}`);
     del.onclick = () => { if (state.busy) return; history(); state.objects.splice(i, 1); state.active = -1; changed(); renderObjects(); render(); updateControls(); };
     row.append(b, del); return row;
   }));
   if (!state.objects.length) { const p = document.createElement('p'); p.className = 'muted small'; p.textContent = 'Select an area, then add your first object.'; $('objectList').append(p); }
 }
-function clearPending() { Object.assign(state, {draft: null, rect: null, outlinePrompt: null, strokes: [], anchors: [], segments: [], preview: [], hint: null}); state.pathRequest++; }
+function clearPending() { Object.assign(state, {draft: null, draftBox: null, rect: null, outlinePrompt: null, strokes: [], anchors: [], segments: [], preview: [], hint: null}); state.pathRequest++; }
 function newObject() {
   if (!state.image || state.busy || !allowDiscard()) return;
   history(); clearPending(); state.active = -1; setTool('box'); renderObjects(); render();
@@ -241,17 +264,17 @@ const guides = {
   erase: ['02 / REFINE', 'Clean up the boundary.', 'Paint to remove pixels from the selected object or current selection. Exact holes are preserved in the stored mask.'],
 };
 function setTool(tool) {
-  if (state.busy) return;
+  if (state.busy || isDetection() && tool !== 'box') return;
   if (state.anchors.length && state.tool !== tool) { toast('Finish or discard the outline before changing tools.'); return; }
   state.tool = tool; state.hint = null;
   document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === tool));
-  const [number, title, text] = guides[tool]; $('guideNumber').textContent = number; $('guideTitle').textContent = title; $('guideText').textContent = text;
+  const [number,title,text]=isDetection()?['01 / DRAW A BOX','Frame the whole object.','Drag a tight rectangle, choose a class, then Add object. Select an added object to move it or resize its corner handles. Click + New for another box.']:guides[tool]; $('guideNumber').textContent = number; $('guideTitle').textContent = title; $('guideText').textContent = text;
   canvas.style.cursor = state.space ? 'grab' : 'crosshair'; updateControls(); render();
 }
 function updateControls() {
   const image = Boolean(state.image), locked = state.busy;
   $('reviewBtn').disabled = !image || locked || hasPending();
-  $('commitBtn').disabled = !state.draft || locked;
+  $('commitBtn').disabled = !(state.draft || state.draftBox) || locked;
   $('cancelBtn').disabled = !hasPending() || locked;
   $('finishBtn').disabled = state.anchors.length < 3 || locked;
   $('undoBtn').disabled = !state.undo.length || locked; $('redoBtn').disabled = !state.redo.length || locked;
@@ -261,16 +284,17 @@ function updateControls() {
   $('fgHint').classList.toggle('active', state.hint === 'fg'); $('bgHint').classList.toggle('active', state.hint === 'bg');
   $('fgHint').setAttribute('aria-pressed', state.hint === 'fg'); $('bgHint').setAttribute('aria-pressed', state.hint === 'bg');
   document.querySelectorAll('[data-tool]').forEach(b => b.disabled = locked);
-  for (const id of ['newDatasetBtn', 'datasetSelect', 'settingsBtn', 'importBtn']) $(id).disabled = locked;
+  for (const id of ['newDatasetBtn', 'datasetSelect', 'taskSelect', 'settingsBtn', 'importBtn']) $(id).disabled = locked;
   if (state.project) renderDataset();
 }
 function point(event) {
   const box = canvas.getBoundingClientRect();
-  return [Math.max(0, Math.min(state.image.width - 1, Math.round((event.clientX - box.left - state.ox) / state.scale))), Math.max(0, Math.min(state.image.height - 1, Math.round((event.clientY - box.top - state.oy) / state.scale)))];
+  return [Math.max(0, Math.min(state.image.width - (isDetection()?0:1), Math.round((event.clientX - box.left - state.ox) / state.scale))), Math.max(0, Math.min(state.image.height - (isDetection()?0:1), Math.round((event.clientY - box.top - state.oy) / state.scale)))];
 }
 function inside(event) {
   const b = canvas.getBoundingClientRect(), x = (event.clientX - b.left - state.ox) / state.scale, y = (event.clientY - b.top - state.oy) / state.scale;
-  return x >= 0 && y >= 0 && x < state.image.width && y < state.image.height;
+  const tolerance = isDetection() ? 1 / state.scale : 0;
+  return x >= -tolerance && y >= -tolerance && x < state.image.width + tolerance && y < state.image.height + tolerance;
 }
 function paint(target, a, b, erase) {
   const c = target.getContext('2d'); c.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
@@ -285,6 +309,18 @@ canvas.addEventListener('pointerdown', run(async event => {
   if (state.space || event.button === 1 || event.button === 2) { state.drawing = {kind: 'pan', start: [event.clientX, event.clientY], offset: [state.ox, state.oy]}; canvas.style.cursor = 'grabbing'; return; }
   if (!inside(event)) return;
   const p = point(event);
+  if(isDetection()) {
+    const target=state.draftBox||state.objects[state.active]?.bbox;
+    if(target) {
+      const corner=boxCorners(target).findIndex(q=>Math.hypot(q[0]-p[0],q[1]-p[1])*state.scale<10);
+      const [x,y,w,h]=target;
+      if(corner>=0||p[0]>=x&&p[0]<=x+w&&p[1]>=y&&p[1]<=y+h) {
+        history(); state.drawing={kind:'editBox',start:p,original:[...target],corner,pending:Boolean(state.draftBox)};return;
+      }
+    }
+    if(!allowDiscard())return;
+    history();clearPending();state.active=-1;state.drawing={kind:'box',start:p,last:p};renderObjects();render();return;
+  }
   if (state.hint && (state.rect || state.outlinePrompt)) {
     history(); const stroke = {points: [p], radius: +$('brushSize').value, foreground: state.hint === 'fg'};
     state.strokes.push(stroke); state.drawing = {kind: 'hint', stroke}; render(); return;
@@ -323,6 +359,17 @@ canvas.addEventListener('pointermove', event => {
   if (drawing) {
     if (drawing.kind === 'pan') { state.ox = drawing.offset[0] + event.clientX - drawing.start[0]; state.oy = drawing.offset[1] + event.clientY - drawing.start[1]; }
     if (drawing.kind === 'box') drawing.last = p;
+    if(drawing.kind==='editBox') {
+      const [x,y,w,h]=drawing.original;let box;
+      if(drawing.corner<0)box=[Math.max(0,Math.min(state.image.width-w,x+p[0]-drawing.start[0])),Math.max(0,Math.min(state.image.height-h,y+p[1]-drawing.start[1])),w,h];
+      else {
+        const q=boxCorners(drawing.original)[(drawing.corner+2)%4];
+        const left=[0,3].includes(drawing.corner),top=[0,1].includes(drawing.corner);
+        const a=left?Math.min(p[0],q[0]-1):Math.max(p[0],q[0]+1),b=top?Math.min(p[1],q[1]-1):Math.max(p[1],q[1]+1);
+        box=[Math.min(a,q[0]),Math.min(b,q[1]),Math.abs(a-q[0]),Math.abs(b-q[1])];
+      }
+      if(drawing.pending)state.draftBox=box;else state.objects[state.active].bbox=box;
+    }
     if (drawing.kind === 'lasso' && drawing.points.length < 3000 && Math.hypot(p[0] - drawing.points.at(-1)[0], p[1] - drawing.points.at(-1)[1]) * state.scale >= 2) drawing.points.push(p);
     if (drawing.kind === 'paint') { paint(drawing.target, drawing.last, p, state.tool === 'erase'); drawing.last = p; }
     if (drawing.kind === 'hint') drawing.stroke.points.push(p);
@@ -347,8 +394,16 @@ async function endDrawing() {
   if (!drawing) return;
   if (drawing.kind === 'box') {
     const [a, b] = [drawing.start, drawing.last];
+    if(isDetection()) {
+      const w=Math.abs(a[0]-b[0]),h=Math.abs(a[1]-b[1]);
+      if(w>=1&&h>=1){state.draftBox=[Math.min(a[0],b[0]),Math.min(a[1],b[1]),w,h];$('saveStatus').textContent='Box not added · choose a class, then Add object';}
+      else toast('Drag a rectangle at least one pixel wide and high.');
+      updateControls();render();return;
+    }
     state.rect = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(a[0] - b[0]) + 1, Math.abs(a[1] - b[1]) + 1];
     await computeCut();
+  } else if(drawing.kind==='editBox') {
+    if(!drawing.pending && JSON.stringify(drawing.original)!==JSON.stringify(state.objects[state.active].bbox))changed();
   } else if (drawing.kind === 'lasso') {
     if (drawing.points.length < 3) { toast('Draw a loop around an object.', true); return; }
     state.outlinePrompt = drawing.points;
@@ -360,7 +415,7 @@ async function endDrawing() {
   updateControls(); render();
 }
 canvas.addEventListener('pointerup', run(endDrawing));
-canvas.addEventListener('pointercancel', () => { state.drawing = null; render(); });
+canvas.addEventListener('pointercancel',()=>{const d=state.drawing;if(d?.kind==='editBox'){if(d.pending)state.draftBox=d.original;else state.objects[state.active].bbox=d.original;}state.drawing=null;render();});
 canvas.addEventListener('contextmenu', event => event.preventDefault());
 canvas.addEventListener('pointerleave', () => { state.cursor = null; render(); });
 canvas.addEventListener('wheel', event => { if (!state.image) return; event.preventDefault(); const box = canvas.getBoundingClientRect(); zoom(Math.exp(-event.deltaY * .0015), event.clientX - box.left, event.clientY - box.top); }, {passive: false});
@@ -394,15 +449,15 @@ async function finishOutline() {
 }
 function hasPixels(c) { const data = c.getContext('2d', {willReadFrequently: true}).getImageData(0, 0, c.width, c.height).data; for (let i = 3; i < data.length; i += 4) if (data[i] >= 128) return true; return false; }
 async function commit() {
-  if (!state.draft || state.busy) return;
-  if (!hasPixels(state.draft)) throw new Error('Selection is empty. Paint an area or discard it.');
-  history(); state.objects.push({id: crypto.randomUUID(), class_id: +$('classSelect').value, canvas: state.draft});
+  if (!(state.draft || state.draftBox) || state.busy) return;
+  if (!isDetection() && !hasPixels(state.draft)) throw new Error('Selection is empty. Paint an area or discard it.');
+  history(); state.objects.push({id: crypto.randomUUID(), class_id: +$('classSelect').value, ...(isDetection()?{bbox:[...state.draftBox]}:{canvas:state.draft})});
   clearPending(); state.active = state.objects.length - 1; changed(); renderObjects(); updateControls(); render(); await save();
 }
 async function review() {
   if (!state.image || state.busy) return;
   if (hasPending()) throw new Error('Add or discard the unfinished selection before review.');
-  if (state.objects.some(o => !hasPixels(o.canvas))) throw new Error('An object is empty. Delete it before review.');
+  if (state.objects.some(o => !o.bbox && !hasPixels(o.canvas))) throw new Error('An object is empty. Delete it before review.');
   state.image.reviewed = true; changed(false); await save();
   const index = state.project.images.findIndex(i => i.id === state.image.id);
   const next = [...state.project.images.slice(index + 1), ...state.project.images.slice(0, index)].find(i => !i.reviewed);
@@ -423,11 +478,11 @@ async function finishImport(result) {
   if (!result.errors.length && result.added) { $('importDialog').close(); toast(`${result.added} images imported.`); }
 }
 async function exportData() {
-  await save(); $('downloadBtn').disabled = true; $('exportResult').textContent = 'Checking masks and packaging reviewed images…';
+  await save(); $('downloadBtn').disabled = true; $('exportResult').textContent = 'Checking labels and packaging reviewed images…';
   try {
     const blob = await api('/api/export', 'POST', {format: $('exportFormat').value, val_fraction: +$('valFraction').value / 100, seed: +$('seed').value, epsilon: +$('epsilon').value, allow_lossy: $('allowLossy').checked});
     if (blob.size < 22) throw new Error('The download was empty. Keep this tab open and try exporting again.');
-    const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `magnetlabel-${$('exportFormat').value}.zip`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `magnetlabel-${state.project.task}-${$('exportFormat').value}.zip`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
     $('exportResult').textContent = 'Dataset downloaded. Inspect manifest.json, then extract the ZIP to train.';
   } catch (error) { $('exportResult').textContent = error.message; throw error; }
   finally { $('downloadBtn').disabled = false; }
@@ -443,10 +498,11 @@ $('cancelBtn').onclick = () => { if (!state.busy) { history(); clearPending(); u
 $('reviewBtn').onclick = run(review); $('recomputeBtn').onclick = run(async () => { history(); await computeCut(); });
 $('classSelect').onchange = () => { if (state.active >= 0) { history(); state.objects[state.active].class_id = +$('classSelect').value; changed(); renderObjects(); } render(); };
 for (const [id, hint] of [['fgHint', 'fg'], ['bgHint', 'bg']]) $(id).onclick = () => { state.hint = state.hint === hint ? null : hint; updateControls(); };
-function showSettings(create = false) {
+function showSettings(create = false, task = state.project.task) {
   creatingDataset = create;
   $('settingsTitle').textContent = create ? 'Start a fresh dataset' : 'Set up your labels';
-  $('nameInput').value = create ? 'My segmentation project' : state.project.name;
+  $('nameInput').value = create ? `My ${task} project` : state.project.name;
+  $('settingsTask').value=task;$('settingsTask').disabled=!create&&state.project.images.some(i=>i.objects_count);
   $('labelCount').value = create ? 1 : state.project.classes.length;
   renderClassFields(create ? ['object'] : state.project.classes.map(c => c.name));
   $('settingsDialog').showModal();
@@ -485,6 +541,13 @@ $('datasetSelect').onchange = run(async () => {
   setTool('box');
   if (project.images.length) await openImage(project.images[0].id);
 });
+$('taskSelect').onchange=run(async()=>{
+  const task=$('taskSelect').value;$('taskSelect').value=state.project.task;
+  if(state.busy||!allowDiscard())return;await save();
+  if(state.project.images.some(i=>i.objects_count)){afterSetup=null;showSettings(true,task);return;}
+  state.project=await api('/api/project','PUT',{name:state.project.name,classes:state.project.classes.map(c=>c.name),task});
+  clearPending();state.active=-1;state.undo=[];state.redo=[];renderProject();setTool('box');
+});
 $('focusBtn').onclick = () => {
   const focus = $('workspace').classList.toggle('focus-mode');
   $('focusBtn').setAttribute('aria-pressed', focus); $('focusBtn').textContent = focus ? 'Show panels' : 'Focus image';
@@ -495,14 +558,15 @@ $('saveSettingsBtn').onclick = run(async () => {
   if (!$('labelCount').checkValidity()) throw new Error(`Choose a label count between ${$('labelCount').min} and 100.`);
   const classes = Array.from($('classNameFields').querySelectorAll('input')).map(i => i.value.trim());
   if (classes.some(c => !c)) throw new Error('Give every label a name before continuing.');
-  const currentClass = $('classSelect').value;
+  const currentClass = $('classSelect').value, previousTask = state.project.task;
   await save();
   $('saveSettingsBtn').disabled = true;
-  try { state.project = await api(creatingDataset ? '/api/datasets' : '/api/project', creatingDataset ? 'POST' : 'PUT', {name: $('nameInput').value, classes}); }
+  try { state.project = await api(creatingDataset ? '/api/datasets' : '/api/project', creatingDataset ? 'POST' : 'PUT', {name: $('nameInput').value, classes, task:$('settingsTask').value}); }
   finally { $('saveSettingsBtn').disabled = false; }
   state.datasetId = state.project.dataset_id;
   if (creatingDataset) resetEditor();
-  renderProject(); await refreshDatasets();
+  else if (previousTask !== state.project.task) { clearPending(); state.active=-1; state.undo=[]; state.redo=[]; }
+  renderProject(); setTool('box'); await refreshDatasets();
   $('classSelect').value = creatingDataset ? '0' : currentClass || '0'; $('settingsDialog').close(); toast(creatingDataset ? 'Fresh dataset ready. Import your images.' : 'Project labels saved.');
   if (creatingDataset) { $('importResult').textContent = ''; $('importDialog').showModal(); }
   const next = afterSetup; afterSetup = null; if (next) await next();
@@ -533,4 +597,4 @@ document.addEventListener('keyup', event => { if (event.code === 'Space') { stat
 window.addEventListener('blur', () => state.space = false);
 window.addEventListener('beforeunload', event => { if (state.dirty > state.saved || hasPending()) { event.preventDefault(); event.returnValue = ''; } });
 new ResizeObserver(resize).observe($('canvasWrap'));
-run(async () => { await refreshProject(); await refreshDatasets(); if (state.project.images.length) await openImage(state.project.images.find(i => !i.reviewed)?.id || state.project.images[0].id); })();
+run(async () => { await refreshProject(); await refreshDatasets(); setTool('box'); if (state.project.images.length) await openImage(state.project.images.find(i => !i.reviewed)?.id || state.project.images[0].id); })();

@@ -1,0 +1,37 @@
+{
+  "dataset": "0b2c8f6b922d4de783191757dd9c3adf",
+  "images": [
+    {
+      "id": "014fe37d07ab4e7893b6ea7737274a75",
+      "name": "coffee.png",
+      "width": 600,
+      "height": 400,
+      "reviewed": 1,
+      "revision": 7,
+      "objects_count": 2
+    },
+    {
+      "id": "68e08694b2704901b9330e4d372e8e00",
+      "name": "chelsea.png",
+      "width": 451,
+      "height": 300,
+      "reviewed": 1,
+      "revision": 5,
+      "objects_count": 1
+    }
+  ],
+  "pageErrors": [],
+  "checks": [
+    "reverse rectangle drag",
+    "class labels",
+    "move",
+    "corner resize",
+    "undo",
+    "right-drag pan",
+    "review invalidation",
+    "task isolation",
+    "reload persistence",
+    "YOLO download",
+    "COCO download"
+  ]
+}

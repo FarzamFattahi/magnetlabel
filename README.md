@@ -9,9 +9,9 @@
 
 # MagnetLabel
 
-**Outline an object. Refine its mask. Export a dataset you have reviewed.**
+**Draw boxes or refine masks. Label objects. Export reviewed training data.**
 
-MagnetLabel is a focused, local segmentation annotation workspace. Draw a rough box, polygon, or freehand loop and let computer vision estimate the foreground. Follow edges with magnetic anchors when you need more control, correct individual pixels, and label each object before exporting to YOLO segmentation or COCO.
+MagnetLabel is a local image annotation workspace for **object detection and instance segmentation**. Draw a rough box, polygon, or freehand loop and let computer vision estimate the foreground. Follow edges with magnetic anchors when you need more control, correct individual pixels, and label each object before exporting to YOLO or COCO. Switch to Object detection to draw, move, and resize class-labeled bounding boxes.
 
 No account, cloud upload, GPU, or model weights. Your browser is the interface; your computer stores the images and masks.
 
@@ -25,7 +25,7 @@ No account, cloud upload, GPU, or model weights. Your browser is the interface; 
 
 ### Windows — no Python installation needed
 
-1. Download **MagnetLabel-0.2.0-windows-x64.zip** from the [latest release](https://github.com/FarzamFattahi/magnetlabel/releases/latest).
+1. Download **MagnetLabel-0.3.0-windows-x64.zip** from the [latest release](https://github.com/FarzamFattahi/magnetlabel/releases/latest).
 2. Extract the **entire ZIP**. Double-click `MagnetLabel.exe` inside the extracted folder.
 3. Your browser opens the workspace. Keep the terminal open while labeling; press **Ctrl+C** there to stop.
 
@@ -100,9 +100,46 @@ Right-button drag, middle-button drag, or **Space + drag** pans the image. Scrol
 | Ctrl+S | Save added objects |
 | Left / right arrow | Previous / next image |
 
+## Object detection: rectangle labels
+
+Choose **Object detection · boxes** in the **Annotation task** selector on the left, or while setting up a new dataset. A dataset has one task. Changing the task of an annotated dataset opens a fresh-dataset dialog and preserves earlier work.
+
+1. Import images and name your classes, such as `cup`, `spoon`, or `cat`.
+2. Drag a tight rectangle around the visible object. Drawing in either direction works.
+3. Choose its **Active class**, then click **Add object** or press Enter.
+4. Select an added object in the Objects panel to **drag its interior to move it** or **drag a corner handle to resize it**. Use **+ New** for another instance. Relabel, delete, undo, and redo work for boxes too.
+5. Inspect all boxes, then **Review & next**. Export at least two reviewed images, including verified empty backgrounds if appropriate.
+
+Right drag pans; scroll zooms; Focus image expands the canvas. Editing an added object clears review until you inspect it again. Unfinished boxes must be added or discarded before navigation or review.
+
+![Object detection: labeled cup and spoon bounding boxes](docs/screenshots/object-detection-coffee.png)
+
+![Object detection: visible cat bounding box](docs/screenshots/object-detection-cat.png)
+
+These are illustrative manual boxes, not a benchmark or trained detector output. Try [coffee.png](examples/coffee.png) and [chelsea.png](examples/chelsea.png); see [image provenance](examples/ATTRIBUTION.md). The cup and spoon segmentation showcase above remains Farzam's reviewed mask example.
+
 ## Training-ready exports
 
-Both formats include **exact PNG instance masks**, a deterministic train/validation split, and `manifest.json` with source names, class IDs, instance IDs, review state, and conversion warnings.
+Both tasks include a deterministic train/validation split and `manifest.json` with source names, class IDs, instance IDs, and revisions. Segmentation packages also include **exact PNG instance masks** and conversion warnings. Detection packages contain native boxes.
+
+### YOLO detection
+
+Choose **YOLO detection — bounding boxes**. The ZIP contains `data.yaml`, `images/train`, `images/val`, matching `labels/train` and `labels/val`, and a manifest. Each object is one five-column row:
+
+```text
+class_id x_center y_center width height
+0 0.48333333 0.40750000 0.40000000 0.72500000
+```
+
+Coordinates are normalized to 0–1 using the image dimensions, and class IDs start at zero, following the [official Ultralytics detection format](https://docs.ultralytics.com/datasets/detect/). Reviewed negative images have an empty label file. Set `data.yaml`'s `path` to the extracted directory's absolute path before training. Boxes remain boxes; they are not converted to segmentation polygons or masks.
+
+With Ultralytics installed separately:
+
+```bash
+yolo detect train model=yolo26n.pt data=/absolute/path/to/data.yaml epochs=50 imgsz=640
+```
+
+**COCO detection — bounding boxes** exports split JSON files under `annotations/`, with image metadata, categories, native `[x, y, width, height]` boxes, areas, and `iscrowd: 0`. No synthetic segmentation field is added. A training run is outside this release's validation.
 
 ### YOLO segmentation
 
@@ -160,8 +197,8 @@ python -m ruff format --check src tests examples packaging
 node --check src/magnetlabel/static/app.js
 ```
 
-**42 backend tests** cover mask fidelity, edge-following paths, loose-outline refinement, dataset isolation, persistence, import validation, and export contracts. Browser checks use real pointer input for selection, right-drag pan, corrections, undo/relabeling, dataset switching, focus mode, and both ZIP downloads. The portable executable is exercised through the same browser workflow.
+**54 backend tests** cover mask fidelity, edge-following paths, loose-outline refinement, dataset isolation, persistence, import validation, and export contracts. Browser checks use real pointer input for selection, right-drag pan, corrections, undo/relabeling, dataset switching, focus mode, and both ZIP downloads. The portable executable is exercised through the same browser workflow.
 
 See [validation and reproducible browser commands](docs/validation.md), [architecture](docs/architecture.md), [prior-art research](docs/research.md), and [contributing](CONTRIBUTING.md). MagnetLabel focuses on a small, inspectable local workflow; it does not claim to outperform established annotation tools.
 
-MIT-licensed code by **Farzam Fattahi**. The example photograph is CC0, photographed by Rachel Michetti, courtesy of Pikolo Espresso Bar: [provenance](examples/ATTRIBUTION.md). The [banner prompt](docs/banner-prompt.md) documents the promotional artwork.
+MIT-licensed code by **Farzam Fattahi**. The example photographs are CC0, by Rachel Michetti (courtesy of Pikolo Espresso Bar) and Stefan van der Walt: [provenance](examples/ATTRIBUTION.md). The [banner prompt](docs/banner-prompt.md) documents the promotional artwork.

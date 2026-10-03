@@ -4,7 +4,7 @@ The application has no frontend build step. FastAPI serves static HTML/CSS/JavaS
 
 ```text
 Browser canvas
-  image coordinates → temporary mask / outline → added class-labeled objects
+  image coordinates → temporary mask / outline / rectangle → added class-labeled objects
       |
       | same-origin loopback HTTP
       v
@@ -29,7 +29,7 @@ Project directory
 
 ## Persistence
 
-SQLite serializes writes. Saves validate mask dimensions, nonempty objects, unique instance IDs and known classes. A revision predicate detects stale-tab writes. Existing classes are immutable after masks exist, except for appending new ones. Added objects autosave; outline anchors and unfinished drafts do not.
+SQLite serializes writes. Saves validate mask dimensions, nonempty objects, unique instance IDs and known classes. A revision predicate detects stale-tab writes. Existing classes are immutable after annotations exist, except for appending new ones. Added objects autosave; outline anchors and unfinished drafts do not.
 
 Editing clears reviewed state in the UI save payload. Direct API clients are responsible for that workflow convention; the API is a local app interface, not a hardened public annotation service.
 
@@ -52,3 +52,11 @@ Magnetic shortest-path maps use a four-entry LRU protected by a lock. A new anch
 ## Local boundary
 
 The launcher binds to `127.0.0.1`. Trusted-host and same-origin checks reject browser requests from other origins; no CORS permission is granted. The UI escapes filenames/class names through DOM text nodes. Data directories, environments and exports are excluded from Git. This edition has no authentication and must not be exposed as a network service.
+
+## Detection task
+
+The dataset settings persist `task: detection` or `segmentation`; legacy workspaces migrate to segmentation automatically. Once any annotations exist, task changes require a new dataset. Task and class changes use SQLite write transactions.
+
+Detection objects store native source-pixel `bbox: [x, y, width, height]`, independently of masks. Coordinates are finite; boxes must be at least one pixel and within image bounds. Right and bottom edges may equal the image dimensions. Segmentation and box schemas cannot be mixed. Autosave revision conflicts, class validation, dataset scoping, review, and undo apply to both tasks.
+
+YOLO detection export normalizes box centers and sizes and writes one five-column row per object. COCO detection includes boxes and their area, without a segmentation field. No mask images are generated for detection.

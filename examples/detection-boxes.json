@@ -1,0 +1,49 @@
+{
+  "task": "detection",
+  "classes": [
+    "cup",
+    "spoon",
+    "cat"
+  ],
+  "coordinate_format": "source-pixel x, y, width, height",
+  "purpose": "Illustrative manually drawn visible-object boxes; not benchmark ground truth.",
+  "images": [
+    {
+      "file": "chelsea.png",
+      "objects": [
+        {
+          "class_id": 2,
+          "bbox": [
+            0.0,
+            0.0,
+            385.0,
+            300.0
+          ]
+        }
+      ]
+    },
+    {
+      "file": "coffee.png",
+      "objects": [
+        {
+          "class_id": 0,
+          "bbox": [
+            170.0,
+            18.0,
+            240.0,
+            290.0
+          ]
+        },
+        {
+          "class_id": 1,
+          "bbox": [
+            326.0,
+            67.0,
+            99.0,
+            260.0
+          ]
+        }
+      ]
+    }
+  ]
+}

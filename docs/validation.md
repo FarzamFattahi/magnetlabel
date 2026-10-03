@@ -1,10 +1,10 @@
-# Validation — 0.2.0
+# Validation — 0.3.0
 
 Validated locally on Windows 11, Python 3.12, OpenCV, FastAPI, and Microsoft Edge. CI is configured for Linux and Python 3.11–3.13; consult the Actions badge for the current remote result.
 
 ## Backend
 
-42 pytest checks passed. They cover EXIF normalization, transparency, mask codecs, holes/disconnected regions, native mask dimensions, positive/negative GrabCut hints, edge-following magnetic paths, dataset isolation and restart, stale-tab saves, stable class IDs, upload/folder validation, same-origin protections, reviewed-only exports, deterministic splits, and YOLO/COCO round-trips.
+54 pytest checks passed. They cover EXIF normalization, transparency, mask codecs, holes/disconnected regions, native mask dimensions, positive/negative GrabCut hints, edge-following magnetic paths, dataset isolation and restart, stale-tab saves, stable class IDs, upload/folder validation, same-origin protections, reviewed-only exports, deterministic splits, and YOLO/COCO round-trips.
 
 Both coarse polygon and freehand-outline fixtures recover a known high-contrast circle with over 98% IoU, remain inside the input outline, and remove background. These controlled checks establish geometry and API behavior, not accuracy on arbitrary photographs. Full-image, tiny, nonfinite, and out-of-bounds outlines are rejected.
 
@@ -52,3 +52,11 @@ The wheel/source distribution include the static GUI. A self-contained Windows x
 Rebuild from a Windows development environment with `powershell -File packaging/build-windows.ps1`. Packaging excludes environments, SQLite workspaces, private/user images, and generated exports. The portable package includes third-party license notices.
 
 Not exercised: macOS, YOLO training, GPU/SAM inference, large-scale datasets, or multi-user operation. Dataset quality remains dependent on human review and an appropriate split.
+
+## Object detection — 0.3.0
+
+Backend checks cover task migration and locking, native box validation (including nonfinite/out-of-bounds/zero-size values), schema separation, stale saves, dataset isolation, reviewed negatives, draft exclusion, normalized five-column YOLO rows, and native COCO box/area records without segmentation.
+
+Run `node tests/detection-browser.cjs` against a fresh workspace on port 8769 (`BASE_URL` overrides it). It creates its own detection dataset and uses real mouse input to draw reversed rectangles, move and resize boxes, undo edits, pan with the right button, relabel, clear review through editing, switch task without changing existing annotations, reload saved objects, and download YOLO and COCO ZIPs. It captures the actual coffee and cat workspace screenshots and records results in `docs/detection-ui-result.json`.
+
+The 0.3.0 Windows portable executable passed the same detection browser workflow on port 8768, including both ZIP downloads and zero page errors. The archive passed CRC validation and contains no SQLite annotation databases. Existing segmentation smoke checks also passed after the task selector was added.

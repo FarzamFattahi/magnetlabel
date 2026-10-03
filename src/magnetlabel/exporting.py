@@ -91,6 +91,7 @@ def export_dataset(
     manifest = {
         "version": 1,
         "format": fmt,
+        "task": project["task"],
         "seed": seed,
         "val_fraction": val_fraction,
         "classes": project["classes"],
@@ -128,6 +129,29 @@ def export_dataset(
             }
             lines = []
             for j, obj in enumerate(image["objects"]):
+                if project["task"] == "detection":
+                    x, y, w, h = obj["bbox"]
+                    entry["objects"].append(
+                        {"id": obj["id"], "class_id": obj["class_id"], "bbox": obj["bbox"]}
+                    )
+                    if fmt == "yolo":
+                        coords = [(x + w / 2) / width, (y + h / 2) / height, w / width, h / height]
+                        lines.append(
+                            str(obj["class_id"]) + " " + " ".join(f"{v:.8f}" for v in coords)
+                        )
+                    else:
+                        coco[split]["annotations"].append(
+                            {
+                                "id": annotation_id,
+                                "image_id": idx,
+                                "category_id": obj["class_id"],
+                                "bbox": obj["bbox"],
+                                "area": w * h,
+                                "iscrowd": 0,
+                            }
+                        )
+                        annotation_id += 1
+                    continue
                 mask = decode_mask(obj["mask"], width, height)
                 mask_path = f"masks/{image_id}/{j:03}.png"
                 archive.writestr(mask_path, cv2.imencode(".png", mask * 255)[1].tobytes())
@@ -191,10 +215,14 @@ def export_dataset(
         archive.writestr("manifest.json", json.dumps(manifest, indent=2))
         archive.writestr(
             "README.txt",
-            "MagnetLabel reviewed dataset\n"
+            f"MagnetLabel reviewed {project['task']} dataset\n"
             "Original names and instance identities: manifest.json\n"
-            "Exact binary masks: masks/ (0 background, 255 foreground)\n"
-            "Images are EXIF-normalized RGB PNG copies.\n"
+            + (
+                "Exact binary masks: masks/ (0 background, 255 foreground)\n"
+                if project["task"] == "segmentation"
+                else "Bounding boxes: manifest.json; YOLO labels use normalized center x/y, width/height.\n"
+            )
+            + "Images are EXIF-normalized RGB PNG copies.\n"
             "For YOLO, set data.yaml path to this extracted directory's absolute path.\n"
             "Inspect manifest warnings before training. Split is by image, not source sequence.\n",
         )

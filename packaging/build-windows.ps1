@@ -8,4 +8,4 @@ Copy-Item -LiteralPath LICENSE -Destination dist/MagnetLabel/LICENSE.txt
 Copy-Item -LiteralPath packaging/PORTABLE-README.txt -Destination dist/MagnetLabel/START-HERE.txt
 & .venv\Scripts\python.exe packaging/license-notices.py
 if ($LASTEXITCODE -ne 0) { throw 'License collection failed' }
-Compress-Archive -LiteralPath dist/MagnetLabel -DestinationPath dist/MagnetLabel-0.2.0-windows-x64.zip -Force
+Compress-Archive -LiteralPath dist/MagnetLabel -DestinationPath dist/MagnetLabel-0.3.0-windows-x64.zip -Force

@@ -2,7 +2,7 @@
 
 import io
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 import cv2
@@ -22,6 +22,7 @@ from .store import ConflictError, Store
 class Config(BaseModel):
     name: str = Field(max_length=120)
     classes: list[str] = Field(min_length=1, max_length=100)
+    task: Literal["segmentation", "detection"] | None = None
 
 
 class Folder(BaseModel):
@@ -32,7 +33,8 @@ class Folder(BaseModel):
 class ObjectMask(BaseModel):
     id: str
     class_id: int = Field(ge=0)
-    mask: str
+    mask: str | None = None
+    bbox: tuple[float, float, float, float] | None = None
 
 
 class Save(BaseModel):
@@ -71,7 +73,7 @@ class Export(BaseModel):
 
 
 def create_app(data_dir: Path) -> FastAPI:
-    app = FastAPI(title="MagnetLabel", version="0.2.0")
+    app = FastAPI(title="MagnetLabel", version="0.3.0")
     datasets, magnetic = Datasets(data_dir), MagneticPaths()
     app.state.store = datasets.get()
     app.state.datasets = datasets
@@ -119,7 +121,7 @@ def create_app(data_dir: Path) -> FastAPI:
 
     @app.get("/api/health")
     def health():
-        return {"app": "magnetlabel", "version": "0.2.0"}
+        return {"app": "magnetlabel", "version": "0.3.0"}
 
     @app.get("/api/datasets")
     def list_datasets():
@@ -127,7 +129,7 @@ def create_app(data_dir: Path) -> FastAPI:
 
     @app.post("/api/datasets")
     def create_dataset(body: Config):
-        _, store = datasets.create(body.name, body.classes)
+        _, store = datasets.create(body.name, body.classes, body.task or "segmentation")
         return project_view(store)
 
     @app.post("/api/datasets/{dataset_id}/activate")
@@ -140,7 +142,7 @@ def create_app(data_dir: Path) -> FastAPI:
 
     @app.put("/api/project")
     def configure(body: Config, store: ProjectStore):
-        store.configure(body.name, body.classes)
+        store.configure(body.name, body.classes, body.task)
         return project_view(store)
 
     @app.post("/api/import/upload")
@@ -207,11 +209,16 @@ def create_app(data_dir: Path) -> FastAPI:
     @app.put("/api/images/{image_id}")
     def save(image_id: str, body: Save, store: ProjectStore):
         return store.save(
-            image_id, [obj.model_dump() for obj in body.objects], body.reviewed, body.revision
+            image_id,
+            [obj.model_dump(exclude_none=True) for obj in body.objects],
+            body.reviewed,
+            body.revision,
         )
 
     @app.post("/api/images/{image_id}/grabcut")
     def cut(image_id: str, body: Cut, store: ProjectStore):
+        if store.project()["task"] != "segmentation":
+            raise ValueError("Selection assistance is available in segmentation datasets.")
         image = bgr_image(store.image_path(image_id).read_bytes())
         return {
             "mask": encode_mask(
@@ -221,6 +228,8 @@ def create_app(data_dir: Path) -> FastAPI:
 
     @app.post("/api/images/{image_id}/magnetic")
     def edge_path(image_id: str, body: PathQuery, store: ProjectStore):
+        if store.project()["task"] != "segmentation":
+            raise ValueError("Selection assistance is available in segmentation datasets.")
         image = bgr_image(store.image_path(image_id).read_bytes())
         try:
             points = magnetic.path(
@@ -284,6 +293,8 @@ def create_app(data_dir: Path) -> FastAPI:
 
     @app.post("/api/images/{image_id}/outline-assist")
     def assist_outline(image_id: str, body: Outline, store: ProjectStore):
+        if store.project()["task"] != "segmentation":
+            raise ValueError("Selection assistance is available in segmentation datasets.")
         image = bgr_image(store.image_path(image_id).read_bytes())
         return {
             "mask": encode_mask(

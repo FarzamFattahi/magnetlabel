@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import sqlite3
 import uuid
 from pathlib import Path
@@ -32,6 +33,7 @@ class Store:
                 );
             """)
             conn.execute("INSERT OR IGNORE INTO settings VALUES ('configured', 'false')")
+            conn.execute("INSERT OR IGNORE INTO settings VALUES ('task', '\"segmentation\"')")
             conn.execute(
                 "INSERT OR IGNORE INTO settings VALUES ('name', ?)",
                 (json.dumps("My segmentation project"),),
@@ -65,7 +67,9 @@ class Store:
             image["objects_count"] = counts[image["id"]]
         return settings
 
-    def configure(self, name: str, classes: list[str]):
+    def configure(self, name: str, classes: list[str], task: str | None = None):
+        if task is not None and task not in ("segmentation", "detection"):
+            raise ValueError("Choose segmentation or detection.")
         names = [s.strip() for s in classes]
         if (
             not name.strip()
@@ -86,8 +90,15 @@ class Store:
             ).fetchone()
             if has_objects and names[: len(old)] != [c["name"] for c in old]:
                 raise ValueError(
-                    "Existing classes cannot be renamed, removed, or reordered once masks exist. Append new classes."
+                    "Existing classes cannot be renamed, removed, or reordered once annotations exist. Append new classes."
                 )
+            old_task = json.loads(
+                conn.execute("SELECT value FROM settings WHERE key='task'").fetchone()[0]
+            )
+            if has_objects and task is not None and task != old_task:
+                raise ValueError("Start a new dataset to change task after annotations exist.")
+            if task is not None:
+                conn.execute("UPDATE settings SET value=? WHERE key='task'", (json.dumps(task),))
             values = [
                 {"id": i, "name": s, "color": PALETTE[i % len(PALETTE)]}
                 for i, s in enumerate(names)
@@ -150,12 +161,52 @@ class Store:
                 ids.add(obj["id"])
                 if not 0 <= obj["class_id"] < len(classes):
                     raise ValueError("Object has an unknown class.")
-                mask = decode_mask(obj["mask"], image["width"], image["height"])
-                if not mask.any():
-                    raise ValueError("Empty objects cannot be saved. Remove the empty object.")
-                validated.append(
-                    {"id": obj["id"], "class_id": obj["class_id"], "mask": encode_mask(mask)}
+                task = json.loads(
+                    conn.execute("SELECT value FROM settings WHERE key='task'").fetchone()[0]
                 )
+                if task == "detection":
+                    box = obj.get("bbox")
+                    if (
+                        obj.get("mask") is not None
+                        or not isinstance(box, (list, tuple))
+                        or len(box) != 4
+                    ):
+                        raise ValueError(
+                            "Detection objects require a bounding box, without a mask."
+                        )
+                    if any(
+                        isinstance(v, bool)
+                        or not isinstance(v, (int, float))
+                        or not math.isfinite(v)
+                        for v in box
+                    ):
+                        raise ValueError("Bounding box coordinates must be finite numbers.")
+                    x, y, w, h = box
+                    if (
+                        x < 0
+                        or y < 0
+                        or w < 1
+                        or h < 1
+                        or x + w > image["width"]
+                        or y + h > image["height"]
+                    ):
+                        raise ValueError(
+                            "Bounding boxes must be at least one pixel and inside the image."
+                        )
+                    validated.append(
+                        {"id": obj["id"], "class_id": obj["class_id"], "bbox": list(box)}
+                    )
+                else:
+                    if obj.get("bbox") is not None or not obj.get("mask"):
+                        raise ValueError(
+                            "Segmentation objects require a mask, without a bounding box."
+                        )
+                    mask = decode_mask(obj["mask"], image["width"], image["height"])
+                    if not mask.any():
+                        raise ValueError("Empty objects cannot be saved. Remove the empty object.")
+                    validated.append(
+                        {"id": obj["id"], "class_id": obj["class_id"], "mask": encode_mask(mask)}
+                    )
             result = conn.execute(
                 "UPDATE images SET objects=?,reviewed=?,revision=revision+1 WHERE id=? AND revision=?",
                 (json.dumps(validated), int(reviewed), image_id, revision),

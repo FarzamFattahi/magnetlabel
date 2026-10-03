@@ -11,3 +11,5 @@
 @media(max-width:1200px){.workspace{grid-template-columns:200px minmax(320px,1fr) 230px}.panel{padding:20px 12px}.editor{padding:18px 12px 10px}}
 @media(max-width:950px){.workspace{grid-template-columns:180px minmax(320px,1fr)}.focus-mode>.editor{height:680px}}
 @media(max-width:620px){.workspace{display:flex}.editor-display button{font-size:11px;padding:6px}.editor{padding:16px 10px 8px}.focus-mode>.editor{height:calc(100dvh - 110px);min-height:520px}.tools{flex-wrap:wrap}.dataset-switch{margin:8px 0 12px}.editor-heading h2{max-width:210px}.toolbar .history{margin-left:auto}}
+
+.task-settings{margin:16px 0}.task-settings select{width:100%}
